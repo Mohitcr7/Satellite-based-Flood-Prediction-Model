@@ -1,0 +1,20 @@
+# MLflow
+mlflow.db
+mlruns/
+mlartifacts/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+floodenv/
+*.egg-info/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Large data (keep raw inputs tracked as needed; ignore heavy intermediates)
+outputs/plots/*.png

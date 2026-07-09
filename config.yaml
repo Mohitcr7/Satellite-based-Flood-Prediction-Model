@@ -1,0 +1,69 @@
+# ============================================================================
+# Flood Prediction — single source of truth for paths, features & training.
+# Consumed by src/flood_pipeline.py and src/train.py.
+# ============================================================================
+
+paths:
+  raw_features: data/raw/unprocessed_dataset.csv   # untransformed features + geo bbox
+  labels:       data/processed/FloodLabels.csv     # X_max,X_min,Y_max,Y_min,floodClass
+  models_dir:   models
+  outputs_dir:  outputs
+  mlflow_uri:   sqlite:///mlflow.db                 # local DB backend (enables Model Registry); swap for a server URI
+
+merge_keys: [X_min, Y_max, X_max, Y_min]
+
+# Columns that are identifiers / geometry — never fed to the model.
+drop_columns: ["Unnamed: 0", index, X_min, X_max, Y_min, Y_max, latitude, longitude]
+
+# Raw feature transforms (all fit INSIDE each CV fold — no leakage).
+features:
+  # 9 yearly rainfall columns collapsed to N principal components (fit per-fold).
+  rainfall_pca_columns:
+    [rainfall_2015, rainfall_2016, rainfall_2017, rainfall_2018, rainfall_2019,
+     rainfall_2020, rainfall_2021, rainfall_2022, rainfall_2023]
+  rainfall_pca_n: 1
+  # Redundant / collinear raw columns dropped after engineering.
+  drop_after_engineering: [Slope, SPI, Distance_to_River]
+
+labels:
+  multiclass: floodClass          # 0 = none, 1 = mild, 2 = severe
+  # binary detector target: flood_any = 1 if floodClass in {1,2}
+  # severity target:        severity_bin = 0 (mild) / 1 (severe), floods only
+
+validation:
+  random_state: 42
+  test_size: 0.20                 # final untouched hold-out
+  cv_folds: 5
+  cv_repeats: 3                   # RepeatedStratifiedKFold for stable mean±std
+  spatial_block_m: 500            # UTM block size -> GroupKFold groups (spatial CV)
+  recall_target: 0.90             # detector operating point
+  calibrate: true                 # isotonic calibration of detector probabilities
+
+detector_params:
+  n_estimators: 400
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.9
+  colsample_bytree: 0.9
+  reg_alpha: 1.0
+  reg_lambda: 1.0
+  objective: "binary:logistic"
+  eval_metric: logloss
+  tree_method: hist
+  random_state: 42
+
+severity_params:
+  n_estimators: 250
+  max_depth: 5
+  learning_rate: 0.05
+  subsample: 0.9
+  colsample_bytree: 0.8
+  objective: "binary:logistic"
+  eval_metric: logloss
+  tree_method: hist
+  random_state: 42
+
+mlflow:
+  experiment: flood-hierarchical
+  detector_registered_name: flood-detector
+  severity_registered_name: flood-severity
